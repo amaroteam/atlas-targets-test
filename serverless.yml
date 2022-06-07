@@ -1,0 +1,76 @@
+service: data-amaro-${self:provider.tags.application}
+frameworkVersion: '2'
+variablesResolutionMode: 20210326
+
+provider:
+  name: aws
+  runtime: python3.8
+  lambdaHashingVersion: 20201221
+  role: "arn:aws:iam::${self:custom.accountID}:role/data-${self:custom.deploymentStage}-atlas-etls-ExecutionRole-lambda"
+  region: ${opt:region, 'us-east-1'}
+  deploymentBucket:
+    name: ${self:custom.deploymentStage}-data-amaro-atlas-etls
+    maxPreviousDeploymentArtifacts: 1000
+  tags:
+    cost-center: 16040008
+    application: VAR_MANAGER_1
+    chapter: data-engineering
+
+plugins:
+  - serverless-iam-roles-per-function
+  - serverless-plugin-canary-deployments
+custom:
+  deploymentStage: ${opt:stage, 'dev'}
+  accountID: ${opt:app, '629848764789'}
+  vpc:
+    securityGroupIds:
+      dev: sg-0d3e67ce5d709c2cc
+      prod: sg-08e664755eb067467
+    subnetIds:
+      dev:
+        - subnet-7eeb2c35
+        - subnet-07c0862d3ce49b054
+        - subnet-22e84046
+      prod:
+        - subnet-fca6e2d3
+        - subnet-04fd1f12f5a139958
+        - subnet-65bdc538
+
+functions:
+  VAR_MANAGER_2:
+    name: ${self:custom.deploymentStage}-amaro-${self:provider.tags.application}-lambda
+    image: "${self:custom.accountID}.dkr.ecr.us-east-1.amazonaws.com/${self:provider.tags.application}:latest"
+    memorySize: 500
+    timeout: 900
+    package:
+      patterns:
+        - '!node_modules/**'
+    vpc:
+      securityGroupIds: ${self:custom.vpc.securityGroupIds.${self:custom.deploymentStage}}
+      subnetIds: ${self:custom.vpc.subnetIds.${self:custom.deploymentStage}}
+    environment:
+        DD_API_KEY: __DATADOGKEY__
+        DD_ENV: ${opt:stage, 'dev'}
+        DD_LAMBDA_HANDLER: main.handler
+        DD_SERVICE: atlas
+        DD_TAGS: atlas:${self:provider.tags.application}
+        DD_TRACE_ENABLED: true
+
+
+package:
+  individually: true
+  exclude:
+    - "package.json"
+    - "package-lock.json"
+    - "node_modules/**"
+    - ".gitignore"
+    - "env/"
+    - "__pycache__"
+    - "tests/**"
+    - ".img"
+    - "README.md"
+    - "task_classes/create_snow_tasks.py"
+    - "task_classes/__pycache__"
+    - "Dockerfile"
+    - ".github/**"
+    - "template/*"

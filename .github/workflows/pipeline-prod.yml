@@ -1,0 +1,149 @@
+name: Prod Deploy Python Lambda
+
+on:
+  pull_request:
+    branches: 
+      - main
+    types: [closed]
+
+
+env:
+  APP_NAMESPACE: VAR_MANAGER_1
+  APP_NAME: VAR_MANAGER_1
+  AWS_REGION: us-east-1
+
+  # prod vars
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+  AWS_ACCOUNT_ID: ${{ secrets.AWS_PROD_ACCOUNT_ID }}
+  AWS_PAT: ${{ secrets.PAT }}
+  AWS_STAGE: prod
+  DATADOG_KEY: ${{ secrets.DATADOG_LAMBDA_API_KEY }}
+  
+jobs:
+  deploy-serverless-prod:
+    name: deploy-serverless-prod
+    if: ${{ github.event.pull_request.merged }}
+    runs-on: deployer-prod 
+    env:
+      NODE_VERSION: 14.x # used for installing the serverless-python-requirements dependency from NPM
+
+    strategy:
+      matrix:
+        python-version:
+          - 3.8 # with a build matrix, you can specify a list of python versions to deploy with
+    timeout-minutes: 10
+    steps:
+      # --------- use Python to install Python dependencies and run linter, tests, etc. ---------
+      - uses: actions/checkout@v2
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+        # run to install flake8  
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest
+      - name: Lint with flake8
+        run: |
+          # stop the build if there are Python syntax errors or undefined names
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+      
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Checkout
+        uses: actions/checkout@v2
+      
+      - name: Install Citadel
+        uses: actions/checkout@v2
+        with:
+          repository: amaroteam/citadel-package
+          token: ${{ env.AWS_PAT }}
+          path: citadel  
+
+      - name: Print Folder Structure
+        run: |
+          #change structure
+          mv citadel/citadel citadel2
+          rm -r citadel
+          mv citadel2 citadel
+          sudo apt update
+          # install tree
+          sudo apt-get install tree
+          # run tree
+          tree
+          
+      ##Build Dockerfile##
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        env: 
+          AWS_SDK_LOAD_CONFIG: 0
+
+      - name: Extract branch name
+        uses: vazco/github-actions-branch-name@v1
+        id: branch
+
+      - name: Build ECR Image
+        uses: smu-chile/aws-ecr-policy-action@master
+        with:
+          access_key_id: ${{ env.AWS_ACCESS_KEY_ID }}
+          secret_access_key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          ecr_registry: ${{ steps.login-ecr.outputs.registry }}
+          repo: ${{ env.APP_NAME }}
+          region: ${{ env.AWS_REGION }}
+          #tags: ${{ steps.branch.outputs.branch_name }}-${{ github.run_number }}
+          tags: latest
+          create_repo: true
+          create_policy: true
+          scan_images: true
+          ecr_policies: untagged:1 any:20
+        env:
+          DOCKER_BUILDKIT: 1
+      
+      # --------- Use Node and NPM to install serverless-python-requirements ---------
+      - name: Use Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v1
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache node modules
+        uses: actions/cache@v2
+        env:
+          cache-name: cache-node-modules
+        with:
+          # npm cache files are stored in `~/.npm` on Linux/macOS
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
+      - name: Install Node dependencies (specifically, serverless-python-requirements)
+        working-directory: ./
+        run: |
+          npm install --save-dev 
+          npm install -g serverless
+
+      - name: Replace datadog key 
+        run: sed -i 's|__DATADOGKEY__|${{ env.DATADOG_KEY }}|g' serverless.yml
+
+      - name: Serverless Deploy
+        run: |
+          sls deploy --provider aws --key ${{ env.AWS_ACCESS_KEY_ID }} --secret ${{ env.AWS_SECRET_ACCESS_KEY }} --region ${{ env.AWS_REGION }} --stage ${{ env.AWS_STAGE }}  --app ${{ env.AWS_ACCOUNT_ID }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          SLS_DEBUG: 1
+          AWS_SDK_LOAD_CONFIG: 0
+
+          
