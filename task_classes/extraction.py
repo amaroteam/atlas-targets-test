@@ -38,7 +38,7 @@ class Extraction:
             url=self.url
         )
         log.info("Suspending task2 execution until end of backfill...") 
-
+        """
         #Create streamed processed table
         create_replace_table(
             schema=self.schema_processed,
@@ -63,6 +63,7 @@ class Extraction:
     
         end_time = time.strftime("%X", time.gmtime(time.time()))
         log.info("Finish time Extraction: " + end_time)
+        """
         return event
         
 class ExtractionBackfill:
@@ -80,7 +81,7 @@ class ExtractionBackfill:
     def main(self, event):
         start_time = time.strftime("%X", time.gmtime(time.time()))
         log.info("Start time Extraction Backfill: " + start_time)
-
+        
         # Pause Snowflake trigger task
         task_execution(
             schema=self.schema_raw,
@@ -111,7 +112,7 @@ class ExtractionBackfill:
             url=self.url
         )
         log.info("Truncated normalized streamed table...")  
-
+        """
         # Create Temporary table for backfill process
         create_replace_table(
             schema=self.schema_processed,
@@ -126,63 +127,33 @@ class ExtractionBackfill:
 
         end_time = time.strftime("%X", time.gmtime(time.time()))
         log.info("Finish time Extraction Backfill: " + end_time)
-
+        """
         return event
 
 
 def get_normalized_query(schema, table):
-    """Get Source Table Stage Order Items."""
+    """Get Source Table Stage Company Targets Looker."""
     return """
         SELECT
-            TRUE AS is_hybris_order
-            , src:ts_received::varchar AS updated
-            , src:createdDate::timestamp AS created_date
-            , src:uid::string AS order_number
-            , src:payload.orderDate::timestamp AS order_date
-            , src:payload.customerData:emailAddressEncrypted::varchar AS user_id
-            , src:payload.orderStatus::varchar AS order_status
-            , src:payload:orderPlacedGuideShop:name::varchar AS store_name
-            , src:payload:orderPlacedGuideShop:salespersonName::varchar AS salesperson
-            , src:payload.orderDeliveryGuideShop.name::varchar AS shipping_pickup_store 
-            , src:payload.shippingAddress:zipCode::varchar AS address_zip
-            , src:payload.shippingAddress:state::varchar AS address_state
-            , src:payload.shippingAddress:neighborhood::varchar AS address_neighborhood
-            , src:payload.shippingAddress:country::varchar AS address_country
-            , src:payload.shippingAddress:countryIsoCode::varchar AS country_iso
-            , src:payload.shippingAddress:city::varchar AS address_city
-            , src:payload.shippingOption::varchar AS shipping_service
-            , src:payload.shippingQuoteId::varchar AS shipping_quote_id
-            , src:payload:shippingETA::varchar AS shipping_estimated_delivery_date
-            , src:payload.shipmentType::varchar AS shipping_method_id
-            , src:payload.shippingCompany::varchar AS shipping_carrier
-            , src:payload.ispuFlag::boolean AS shipping_pickup_enabled
-            , src:payload.totalShipping::varchar AS shipping_cost
-            , src:payload:totalAmount::varchar AS order_total_paid
-            , src:payload.totalDiscount::varchar AS order_discount
-            , src:payload.totalAmount::number AS order_total
-            , src:payload.couponCode::varchar AS payment_coupon
-            , src:payload:salesApplication::varchar AS source_application
-            , src:payload:deviceType::varchar AS device_type
-            , src:payload.currency::varchar AS local_currency
-            , src:payload:baseValues.currency::varchar AS base_currency
-            , src:payload:baseValues.shipping::varchar AS base_shipping
-            , src:payload:baseValues.subtotal::varchar AS base_subtotal
-            , src:payload:baseValues.total::varchar AS base_total_value
-            , p.value:productCode::string AS sku
-            , p.value:color::string AS product_color
-            , p.value:size::string AS product_size
-            , p.value:price::string AS product_price
-            , p.value:productName::string AS product_name
-            , p.value:qty::number AS quantity
-            , p.value:packageType::string AS shipping_package_name
-            , p.value:guideShopQty::string AS guideshop_qty
-            , p.value:siteURL::string AS site_url
-            , p.value:imageURL::string AS image_url
-            , c.value:code::string AS order_consignment
+         src:ts_sent as uploaded_at
+        ,p.value:Date as date
+        ,p.value:"Day of week" as day_of_week
+        ,p.value:Month as moth
+        ,p.value:Year as year
+        ,p.value:"Gross Revenue" as gross_revenue
+        ,p.value:"Shipped Orders" as shipped_orders
+        ,p.value:"Markup" as markup
+        ,p.value:"First-time Buyers" as first_time_buyers
+        ,p.value:"Returning Buyers" as returning_buyers
+        ,p.value:"DR Media Budget" as dr_media_budget
+        ,p.value:AOV as aov
+        ,p.value:OmniCOS as omnicos
+        ,p.value:"Online CAC" as online_cac
+    
         FROM {schema}.{table}
-            , LATERAL FLATTEN(INPUT => src:payload.products) p
-            , LATERAL FLATTEN(INPUT => src:payload.consignments) c
+            , LATERAL FLATTEN(INPUT => src:payload) p
     """.format(
         schema=schema,
         table=table
     )
+

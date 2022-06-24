@@ -4,7 +4,7 @@ import sys
 
 from citadel.logging import logging_setup
 from citadel.database_operations import execute, truncate_table, create_replace_table, clone_table, create_stream, create_snowpipe
-from citadel.standard import get_standard_configs, get_aws_credentials, get_ssm_credentials
+from citadel.standard import get_standard_configs, get_aws_credentials, get_ssm_credentials, get_services
 from extraction import get_normalized_query
 from transformation import get_transformed_query
 from citadel.s3_functions import S3
@@ -17,7 +17,7 @@ class Snow_tasks:
         self.url_loader = get_standard_configs(stage, env)["sfl_loader_url"]
         self.stage = stage
         self.env = env
-        self.project_name = "template"
+        self.project_name = "company_targets_looker"
         self.schema_raw = f"{stage}_raw.ecs_ecommerce"
         self.origin_schema = "prod_raw.ecs_ecommerce"
         self.schema_processed = f"{stage}_raw_processed.ecs_ecommerce"
@@ -31,15 +31,16 @@ class Snow_tasks:
         self.etl_name = f"atlas-{self.project_name}".replace("_","-")
         self.procedure = f"procedure_atlas_{self.project_name}"
         self.stage_aws = "prd" if self.stage == 'prod' else 'dev'
-        self.s3_bucket_url = f's3://{self.stage_aws}-amaro-data-lake-bucket/hybris/template/'
-        self.s3_bucket_name = f'{self.stage_aws}-amaro-data-lake-bucket'
-        self.prefix = 'hybris/template/'
+        self.s3_bucket_url = f's3://{self.stage_aws}-amaro-data-lake-bucket/google-sheets/company_targets_looker/' # here
+        self.s3_bucket_name = f'{self.stage_aws}-amaro-data-lake-bucket' # here
+        self.prefix = 'google-sheets/company_targets_looker/' # here
         self.access_key, self.secret_key = get_aws_credentials(stage, env)
-        self.s3_file_format = 'parquet'
-        self.sqs = get_ssm_credentials(self.ssm, '/chapter/dataengineering/atlas/template')['Parameter']['Value']
-        self.snowpipe = f'{self.schema_raw}.{self.table_raw}.pipe_{self.project_name}'
+        self.s3_file_format = 'json'
+        ssm, sts = get_services()
+        self.sqs = get_ssm_credentials(ssm, '/chapter/dataengineering/atlas/snowpipe_sqs')['Parameter']['Value'] # here
+        self.snowpipe = f'{self.schema_raw}.{self.table_raw}.pipe_{self.project_name}' # here
         
-
+        
     def main(self):
         start_time = time.strftime("%X", time.gmtime(time.time()))
         log.info("Start Snowflake stream and tasks creations: " + start_time)
@@ -51,7 +52,7 @@ class Snow_tasks:
                 new_table=self.project_name,
                 origin_schema=self.origin_schema,
                 origin_table=self.project_name,
-                url=self.url
+                url=self.url # transformer url
             )
             log.info("Created Dev raw table...")
 
@@ -105,7 +106,7 @@ class Snow_tasks:
         create_stream(
             schema=self.schema_raw, 
             table=self.table_raw, 
-            url=self.url_loader
+            url=self.url
         )
         log.info("Created Stream...")
 
@@ -151,7 +152,7 @@ class Snow_tasks:
             "env": "aws",
             "task": "extract",
             "mode": "nobackfill",
-            "lambdaName": f"{self.stage}-amaro-{self.etl_name}-lambda",
+            "lambdaName": f"{self.stage}-amaro-{self.etl_name}-lambda", # here
             "hasExtraction": True,
             "kwarg": "null",
             "data": {}
@@ -180,29 +181,33 @@ class Snow_tasks:
         )
         log.info("Activated Task1...")
 
-        # Creating snowpipe
-        # create_snowpipe(
-        #     schema=self.schema_raw,
-        #     table=self.table_raw,
-        #     s3_bucket=self.s3_bucket_url,
-        #     access_key=self.access_key,
-        #     secret_key=self.secret_key,
-        #     s3_file_format=self.s3_file_format,
-        #     url=self.url_loader
-        # )
-        # log.info("Created Snowpipe...")
-
-        # # Creating bucket notification
-        # s3 = S3(self.env, self.stage, self.s3_bucket_url)
-
-        # s3.create_bucket_notification(
-        #     bucket_name=self.s3_bucket_name,
-        #     pipe=self.snowpipe,
-        #     snowpipe_sqs=self.sqs,
-        #     prefix=self.prefix
-        # )
-        # log.info('Bucket notification created...')
-
+        # Creating snowpipe 
+        # here
+        
+        create_snowpipe(
+            schema=self.schema_raw,
+             table=self.table_raw,
+             s3_bucket=self.s3_bucket_url,
+             access_key=self.access_key,
+             secret_key=self.secret_key,
+             s3_file_format=self.s3_file_format,
+             url=self.url
+         )
+        log.info("Created Snowpipe...")
+        
+        
+        # Creating bucket notification
+        """
+        s3 = S3(self.env, self.stage, self.s3_bucket_url)
+        
+        s3.create_bucket_notification(
+             bucket_name=self.s3_bucket_name,
+             pipe=self.snowpipe,
+             snowpipe_sqs=self.sqs,
+             prefix=self.prefix
+         )
+        log.info('Bucket notification created...')
+        """
 def create_task1(schema_raw, table_raw, schema_processed, table_streamed):
     query = """
         CREATE OR REPLACE TASK {schema_raw}.{table_raw}_task1

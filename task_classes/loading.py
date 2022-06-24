@@ -31,10 +31,10 @@ class Loading:
         delete_from_table(
             schema=self.schema_staging,
             table=self.table_staging,
-            id='order_number',
+            id='aov',
             schema_temp=self.schema_processed,
             table_temp=self.table_transformed_temp,
-            id_list='order_number',
+            id_list='aov',
             url=self.url
         )
 

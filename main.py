@@ -29,7 +29,7 @@ class TemplateClass:
         self.url = url
         self.url_xl = url_xl
         self.stage = stage
-        self.project_name = "template"
+        self.project_name = "company_targets_looker" # here
         self.methods = {
             "extract": Extraction(self.url, self.stage, self.project_name).main,
             "extract_validation": self.pass_method,
@@ -84,20 +84,20 @@ def handler(event, context):
         log.info("Backfill start time: " + start_time)
         log.info("Running in {stage}...".format(stage=stage))
         
-        event = etl.execute_task_backfill(task, event)
+        #event = etl.execute_task_backfill(task, event)
         #For local testing, remove the following comments and comment the line above and check if __name__ == "__main__":
-        # event = etl.execute_task_backfill('extract', event)
+        event = etl.execute_task_backfill('extract', event)
         # event = etl.execute_task_backfill('extract_validation', event)
-        # event = etl.execute_task_backfill('transform', event)
+        event = etl.execute_task_backfill('transform', event)
         # event = etl.execute_task_backfill('transform_validation', event)
-        # event = etl.execute_task_backfill('load', event)
+        event = etl.execute_task_backfill('load', event)
     else:
         log.info("Start time: " + start_time)
         log.info("Running in {stage}...".format(stage=stage))
 
-        event = etl.execute_task(task, event)
+        #event = etl.execute_task(task, event)
         #For local testing, remove the following comments and comment the line above and check if __name__ == "__main__":
-        # event = etl.execute_task('extract', event)
+        event = etl.execute_task('extract', event)
         # event = etl.execute_task('extract_validation', event)
         # event = etl.execute_task('transform', event)
         # event = etl.execute_task('transform_validation', event)
@@ -121,16 +121,16 @@ def handler(event, context):
     return event
 
 if __name__ == "__main__":
-    handler(sys.argv, {})
+    #handler(sys.argv, {})
     #For local testing, remove the following comments and comment the line above
-    # event = {
-    #    "stage": "dev",
-    #    "env": "local",
-    #    "task": "extract",
-    #    "mode": "nobackfill",
-    #    "lambdaName": "dev-amaro-atlas-etl-template-lambda",
-    #    "hasExtraction": True,
-    #    "kwarg": "null",
-    #    "data": {}
-    # }
-    # handler(event, {})
+     event = {
+        "stage": "dev",
+        "env": "local",
+        "task": "extract",
+        "mode": "nobackfill",
+        "lambdaName": "dev-amaro-atlas-etl-template-lambda",
+        "hasExtraction": True,
+        "kwarg": "null",
+        "data": {}
+     }
+     handler(event, {})

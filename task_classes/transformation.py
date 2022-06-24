@@ -78,73 +78,22 @@ class TransformationBackfill:
 def get_transformed_query(schema, table):
     """Get Source Table Stage Order Items."""
     return """
-        WITH 
-            normalized AS (
-                SELECT *
-                FROM ({schema}.{table}) oi
-                QUALIFY ROW_NUMBER() OVER(PARTITION BY order_number, sku ORDER BY updated DESC) = 1
-                )
-            , stg_ecomm_order_items AS (
-                SELECT *
-                    , COALESCE(product_price / (SUM(product_price) OVER(PARTITION by order_number)),1) AS share_of_item_in_order_ratio_price
-                FROM normalized
-                )
-        SELECT 
-            share_of_item_in_order_ratio_price
-            , is_hybris_order
-            , order_date
-            , order_number
-            , order_consignment
-            , user_id
-            , updated
-            , order_status
-            , product_price AS order_subtotal
-            , order_discount * share_of_item_in_order_ratio_price AS order_discount
-            , order_total * share_of_item_in_order_ratio_price AS order_total
-            , order_total_paid * share_of_item_in_order_ratio_price AS order_total_paid
-            , payment_coupon
-            , address_city
-            , address_country
-            , address_neighborhood
-            , address_state
-            , address_zip
-            , shipping_carrier
-            , shipping_cost * share_of_item_in_order_ratio_price AS shipping_paid_by_customer
-            , shipping_estimated_delivery_date
-            , shipping_method_id
-            , shipping_pickup_enabled
-            , shipping_pickup_store
-            , shipping_quote_id AS shipping_quote_id
-            , shipping_service
-            , store_name
-            , salesperson
-            , product_color
-            , product_name
-            , product_size
-            , sku
-            , shipping_package_name
-            , product_price / quantity AS product_price
-            , quantity
-            , ((product_price / quantity) * (order_total_paid * share_of_item_in_order_ratio_price))/nullif(product_price,0) AS product_price_with_discount
-            , source_application
-            , device_type
-            , CASE WHEN source_application = 'WEB' and device_type = 'DESKTOP'
-                THEN 'desktop web'
-                WHEN source_application = 'WEB' and device_type = 'MOBILE'
-                THEN 'mobile web'
-                WHEN source_application = 'IOS' and device_type = 'MOBILE'
-                THEN 'ios app'
-                WHEN source_application = 'ANDROID' and device_type = 'MOBILE'
-                THEN 'android app'
-                ELSE NULL
-                END AS order_source_and_device
-            , country_iso
-            , local_currency
-            , base_currency
-            , base_shipping
-            , base_subtotal
-            , base_total_value
-            FROM stg_ecomm_order_items
+            SELECT
+             uploaded_at::timestamp as uploaded_at 
+            ,date::date as date
+            ,day_of_week
+            ,moth
+            ,year::integer as year
+            ,gross_revenue::float as gross_revenue
+            ,shipped_orders
+            ,markup::float as markup
+            ,first_time_buyers
+            ,returning_buyers
+            ,dr_media_budget
+            ,aov
+            ,omnicos
+            ,online_cac
+            FROM {schema}.{table}
     """.format(
         schema=schema,
         table=table
